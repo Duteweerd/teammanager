@@ -68,6 +68,15 @@
   .role select{background:var(--card-hi);color:var(--chalk);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'Archivo';font-weight:600;font-size:14px;max-width:150px;}
   .role select:disabled{opacity:.6}
   .match-actions{display:flex;gap:8px;padding:4px 4px 0;margin-top:10px;flex-wrap:wrap}
+  .coachbox{padding:11px 4px 13px;border-bottom:1px solid rgba(29,58,87,.5)}
+  .coachhead{font-size:13px;color:var(--muted);font-weight:600;margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .coachhead .tag{font-size:9px;letter-spacing:.5px;text-transform:uppercase}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{background:var(--card-hi);border:1px solid var(--line);color:var(--chalk);border-radius:20px;padding:7px 13px;font-family:'Archivo';font-weight:700;font-size:13px;cursor:pointer;transition:transform .1s}
+  .chip:active{transform:scale(.95)}
+  .chip.on{background:var(--staff);border-color:var(--staff);color:#fff}
+  .chip:disabled{opacity:.4;cursor:not-allowed}
+  .coachempty{font-size:12px;color:var(--muted);font-style:italic}
   .mini{background:var(--card-hi);border:1px solid var(--line);border-radius:9px;color:var(--chalk);font-size:12px;font-weight:700;cursor:pointer;padding:8px 11px}
   .mini.share{background:rgba(22,184,107,.18);border-color:var(--grass);color:var(--grass)}
   .del{background:none;border:none;color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;padding:6px;margin-left:auto}
@@ -239,6 +248,7 @@ function poolOf(p){return p==='staff'?staff:squad;}
 function personName(id){const a=[...squad,...staff].find(x=>x.id===id);return a?a.name:'';}
 // roles relevant to a match: driver only away; referee/drinks only home
 function rolesFor(m){return ROLES.filter(r=>!r.show || r.show===m.ha);}
+function coachesOf(m){return Array.isArray(m.coaches)?m.coaches:[];}
 
 /* ---------- matches CRUD ---------- */
 function openMatchModal(id,e){
@@ -275,6 +285,19 @@ async function delMatch(id,e){e.stopPropagation();if(!confirm('Deze wedstrijd ve
   await del('matches',id);matches=matches.filter(m=>m.id!==id);renderMatches();}
 function toggle(id){openId=openId===id?null:id;renderMatches();}
 async function setRole(id,role,val){const m=matches.find(x=>x.id===id);if(isPast(m))return;m.roles[role]=val;await put('matches',m);renderMatches();}
+async function toggleCoach(id,staffId,e){
+  if(e)e.stopPropagation();
+  const m=matches.find(x=>x.id===id);if(isPast(m))return;
+  if(!Array.isArray(m.coaches))m.coaches=[];
+  const i=m.coaches.indexOf(staffId);
+  if(i>=0){m.coaches.splice(i,1);}
+  else{
+    // becoming a coach clears any other staff role this person held in this match
+    rolesFor(m).forEach(r=>{if(r.pool==='staff'&&m.roles[r.k]===staffId)delete m.roles[r.k];});
+    m.coaches.push(staffId);
+  }
+  await put('matches',m);renderMatches();
+}
 
 /* ---------- share to WhatsApp ---------- */
 function buildMatchText(m){
@@ -284,7 +307,9 @@ function buildMatchText(m){
   const arrive=m.arrive?`⏰ Aanwezig om ${m.arrive}`:null;
   const where=m.ha==='home'?'🏠 Thuis':'🚌 Uit';
   const lines=rolesFor(m).map(r=>`${r.i} ${r.l}: ${m.roles[r.k]?personName(m.roles[r.k]):'—'}`);
-  return [head,when,arrive,where,'',...lines].filter(x=>x!==null).join('\n');
+  const cs=coachesOf(m);
+  const coachLine=cs.length?`🧑‍🏫 ${cs.length>1?'Coaches':'Coach'}: ${cs.map(personName).join(', ')}`:null;
+  return [head,when,arrive,where,'',coachLine,...lines].filter(x=>x!==null).join('\n');
 }
 async function shareMatch(id,e){
   if(e)e.stopPropagation();
@@ -326,7 +351,7 @@ async function autoAssign(){
   if(!future.length){toast('Geen toekomstige wedstrijden');return;}
   let changed=0;
   for(const m of future){
-    const usedThisMatch=[]; // prevent same keeper twice etc.
+    const usedThisMatch=[...coachesOf(m)]; // coaches can't also do other staff jobs; keepers unique etc.
     for(const r of rolesFor(m)){
       const already=m.roles[r.k];
       if(already && !overwrite){usedThisMatch.push(already);continue;}
@@ -348,7 +373,7 @@ async function autoAssignOne(id,e){
   const m=matches.find(x=>x.id===id);if(isPast(m))return;
   const counts=buildCounts();
   ROLES.forEach(r=>poolOf(r.pool).forEach(p=>{if(counts[r.k][p.id]===undefined)counts[r.k][p.id]=0;}));
-  const usedThisMatch=rolesFor(m).map(r=>m.roles[r.k]).filter(Boolean);
+  const usedThisMatch=[...coachesOf(m),...rolesFor(m).map(r=>m.roles[r.k]).filter(Boolean)];
   let changed=0;
   for(const r of rolesFor(m)){
     if(m.roles[r.k])continue;
@@ -373,8 +398,9 @@ function renderMatches(){
   const sorted=[...matches].sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
   el.innerHTML=sorted.map(m=>{
     const f=fmtDate(m.date),op=openId===m.id,past=isPast(m);
-    const optsFor=r=>{const pool=poolOf(r.pool);
-      return `<option value="">—</option>`+pool.map(p=>`<option value="${p.id}"${m.roles[r.k]===p.id?' selected':''}>${esc(p.name)}</option>`).join('');};
+    const optsFor=(r,mm)=>{let pool=poolOf(r.pool);
+      if(r.pool==='staff')pool=pool.filter(p=>!coachesOf(mm).includes(p.id)||mm.roles[r.k]===p.id);
+      return `<option value="">—</option>`+pool.map(p=>`<option value="${p.id}"${mm.roles[r.k]===p.id?' selected':''}>${esc(p.name)}</option>`).join('');};
     return `<div class="match ${op?'open':''} ${past?'past':''}">
       <div class="match-head" onclick="toggle('${m.id}')">
         <div class="badge"><div class="d">${f.d}</div><div class="m">${f.m}</div></div>
@@ -385,11 +411,20 @@ function renderMatches(){
         <span class="chev">▶</span>
       </div>
       <div class="roles">
+        <div class="coachbox">
+          <div class="coachhead">🧑‍🏫 Coaches <span class="tag staff">staf · handmatig</span></div>
+          ${staff.length?`<div class="chips">${staff.map(s=>{
+            const isCoach=coachesOf(m).includes(s.id);
+            const hasOtherRole=rolesFor(m).some(r=>r.pool==='staff'&&m.roles[r.k]===s.id);
+            const disabled=past||(!isCoach&&hasOtherRole);
+            return `<button class="chip ${isCoach?'on':''}" ${disabled?'disabled':''} onclick="toggleCoach('${m.id}','${s.id}',event)">${esc(s.name)}</button>`;
+          }).join('')}</div>`:`<div class="coachempty">Nog geen staf om als coach te kiezen.</div>`}
+        </div>
         ${rolesFor(m).map(r=>`
           <div class="role">
             <div class="ico">${r.i}</div>
             <div class="lbl">${r.l}<span class="tag ${r.pool}">${r.pool==='staff'?'staf':'selectie'}</span></div>
-            <select ${past?'disabled':''} onchange="setRole('${m.id}','${r.k}',this.value)">${optsFor(r)}</select>
+            <select ${past?'disabled':''} onchange="setRole('${m.id}','${r.k}',this.value)">${optsFor(r,m)}</select>
           </div>`).join('')}
         <div class="match-actions">
           <button class="mini share" onclick="shareMatch('${m.id}',event)">📲 Delen</button>
@@ -431,6 +466,7 @@ async function delPerson(id,pool){
     if(pool==='staff')staff=staff.filter(p=>p.id!==id);else squad=squad.filter(p=>p.id!==id);
     for(const m of matches){if(isPast(m))continue;let touched=false;
       ROLES.forEach(r=>{if(m.roles[r.k]===id){delete m.roles[r.k];touched=true;}});
+      if(Array.isArray(m.coaches)&&m.coaches.includes(id)){m.coaches=m.coaches.filter(x=>x!==id);touched=true;}
       if(touched)await put('matches',m);}
     renderPeople();renderMatches();
   }catch(err){
@@ -440,15 +476,17 @@ async function delPerson(id,pool){
 function dutyStats(id){
   const c={};ROLES.forEach(r=>c[r.k]=0);
   matches.forEach(m=>rolesFor(m).forEach(r=>{if(m.roles[r.k]===id)c[r.k]++;}));
+  const coachCount=matches.reduce((s,m)=>s+(coachesOf(m).includes(id)?1:0),0);
   // merge multi-slot roles (keepers, drivers) into one count each for display
   const keeperTotal=(c.keeper1||0)+(c.keeper2||0);
   const driverTotal=(c.driver1||0)+(c.driver2||0)+(c.driver3||0);
   const multi=['keeper1','keeper2','driver1','driver2','driver3'];
   const display=[];
+  if(coachCount)display.push('🧑‍🏫'+coachCount);
   if(driverTotal)display.push('🚗'+driverTotal);
   if(keeperTotal)display.push('🧤'+keeperTotal);
   ROLES.filter(r=>!multi.includes(r.k)&&c[r.k]>0).forEach(r=>display.push(r.i+c[r.k]));
-  const total=Object.values(c).reduce((a,b)=>a+b,0);
+  const total=Object.values(c).reduce((a,b)=>a+b,0)+coachCount;
   return total?`${total} ${total===1?'taak':'taken'} · ${display.join(' ')}`:'nog geen taken';
 }
 function renderPeople(){

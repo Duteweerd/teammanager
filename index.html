@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a2540">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Teambeheer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo:wght@400;500;600;700;800&display=swap');
+  :root{
+    --pitch:#0a2540;--pitch-deep:#06192e;--line:#1d3a57;--grass:#16b86b;--grass-dim:#0e7a47;
+    --chalk:#eef4f8;--muted:#7d97ad;--accent:#ffd23f;--danger:#ff5a52;--card:#102e4a;--card-hi:#15395c;--staff:#7c5cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Archivo',sans-serif;background:var(--pitch-deep);
+    background-image:radial-gradient(circle at 50% -10%, #15395c 0%, transparent 55%),repeating-linear-gradient(0deg, transparent 0 38px, rgba(255,255,255,.012) 38px 76px);
+    color:var(--chalk);min-height:100vh;padding-bottom:90px;}
+  header{padding:calc(env(safe-area-inset-top) + 22px) 20px 18px;background:linear-gradient(160deg,var(--pitch) 0%,var(--pitch-deep) 100%);border-bottom:2px solid var(--line);position:relative;overflow:hidden;}
+  header::after{content:"";position:absolute;right:-40px;top:-30px;width:160px;height:160px;border:3px solid rgba(22,184,107,.18);border-radius:50%;}
+  header h1{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:1.5px;line-height:.95;}
+  header h1 span{color:var(--grass)}
+  header p{color:var(--muted);font-size:13px;margin-top:3px;font-weight:500}
+  .wrap{padding:18px 16px 0;max-width:680px;margin:0 auto}
+  .btn{border:none;border-radius:12px;font-family:'Archivo';font-weight:700;cursor:pointer;font-size:15px;padding:13px 18px;transition:transform .12s,filter .12s;}
+  .btn:active{transform:scale(.96)}
+  .btn-primary{background:var(--grass);color:#022;width:100%}
+  .btn-ghost{background:var(--card-hi);color:var(--chalk)}
+  .btn-accent{background:var(--accent);color:#221a00;width:100%}
+  .btn-row{display:flex;gap:10px;margin-bottom:14px}
+  .auto-bar{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:18px;}
+  .auto-bar .ovr{display:flex;align-items:center;gap:9px;margin-top:11px;font-size:13px;color:var(--muted);font-weight:600;}
+  .switch{position:relative;width:42px;height:24px;flex-shrink:0}
+  .switch input{display:none}
+  .switch .sl{position:absolute;inset:0;background:var(--pitch-deep);border:1px solid var(--line);border-radius:20px;transition:.2s}
+  .switch .sl::before{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:var(--muted);top:2px;left:2px;transition:.2s}
+  .switch input:checked + .sl{background:var(--grass);border-color:var(--grass)}
+  .switch input:checked + .sl::before{transform:translateX(18px);background:#022}
+  .match{background:var(--card);border:1px solid var(--line);border-radius:18px;margin-bottom:16px;overflow:hidden;}
+  .match.past{opacity:.72}
+  .match-head{padding:15px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;background:linear-gradient(100deg,var(--card-hi),var(--card));}
+  .badge{background:var(--pitch-deep);border:1px solid var(--line);border-radius:10px;text-align:center;min-width:50px;padding:6px 4px;}
+  .badge .d{font-family:'Bebas Neue';font-size:24px;line-height:1;color:var(--accent)}
+  .badge .m{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .match-head .info{flex:1;min-width:0}
+  .match-head .opp{font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .match-head .meta{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ha{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px}
+  .ha.home{background:rgba(22,184,107,.18);color:var(--grass)}
+  .ha.away{background:rgba(255,210,63,.16);color:var(--accent)}
+  .lock{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px;background:rgba(125,151,173,.18);color:var(--muted)}
+  .chev{color:var(--muted);transition:transform .2s;font-size:13px}
+  .match.open .chev{transform:rotate(90deg)}
+  .roles{display:none;padding:6px 14px 16px;border-top:1px solid var(--line)}
+  .match.open .roles{display:block}
+  .role{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid rgba(29,58,87,.5)}
+  .role:last-child{border-bottom:none}
+  .role .ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--pitch-deep);font-size:17px;flex-shrink:0}
+  .role .lbl{font-size:13px;color:var(--muted);flex:1;font-weight:600}
+  .role .lbl .tag{display:block;font-size:9px;letter-spacing:.5px;text-transform:uppercase;margin-top:1px}
+  .tag.squad{color:var(--grass)}
+  .tag.staff{color:var(--staff)}
+  .role select{background:var(--card-hi);color:var(--chalk);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-family:'Archivo';font-weight:600;font-size:14px;max-width:150px;}
+  .role select:disabled{opacity:.6}
+  .match-actions{display:flex;gap:8px;padding:4px 4px 0;margin-top:10px;flex-wrap:wrap}
+  .mini{background:var(--card-hi);border:1px solid var(--line);border-radius:9px;color:var(--chalk);font-size:12px;font-weight:700;cursor:pointer;padding:8px 11px}
+  .mini.share{background:rgba(22,184,107,.18);border-color:var(--grass);color:var(--grass)}
+  .del{background:none;border:none;color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;padding:6px;margin-left:auto}
+  .empty{text-align:center;color:var(--muted);padding:48px 20px;font-size:14px;line-height:1.6}
+  .empty .ball{font-size:46px;display:block;margin-bottom:12px}
+  nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--pitch);border-top:2px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;background:none;border:none;color:var(--muted);padding:12px 0 14px;font-family:'Archivo';font-weight:700;font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+  nav button .ni{font-size:20px}
+  nav button.on{color:var(--grass)}
+  .view{display:none}
+  .view.on{display:block}
+  .grouphdr{font-family:'Bebas Neue';font-size:20px;letter-spacing:1px;margin:6px 2px 12px;color:var(--muted)}
+  .grouphdr.staff{color:var(--staff)}
+  .person{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:9px;display:flex;align-items:center;gap:11px}
+  .person .num{font-family:'Bebas Neue';font-size:22px;color:var(--grass);min-width:24px;text-align:center}
+  .person.staff .num{color:var(--staff)}
+  .person .pname{flex:1;font-weight:700;font-size:15px}
+  .person .stats{font-size:11px;color:var(--muted);font-weight:600}
+  .modal-bg{position:fixed;inset:0;background:rgba(3,12,22,.78);backdrop-filter:blur(3px);display:none;align-items:flex-end;z-index:50}
+  .modal-bg.on{display:flex}
+  .modal{background:var(--card);width:100%;border-radius:22px 22px 0 0;padding:22px 18px calc(env(safe-area-inset-bottom) + 22px);border-top:2px solid var(--grass);animation:up .25s ease;max-width:680px;margin:0 auto}
+  @keyframes up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .modal h2{font-family:'Bebas Neue';font-size:26px;letter-spacing:1px;margin-bottom:16px}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .field input{width:100%;background:var(--pitch-deep);border:1px solid var(--line);border-radius:11px;padding:13px;color:var(--chalk);font-family:'Archivo';font-size:16px;font-weight:600}
+  .field input:focus{outline:none;border-color:var(--grass)}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--pitch-deep);color:var(--muted);font-family:'Archivo';font-weight:700;cursor:pointer}
+  .seg button.sel{background:var(--grass);color:#022;border-color:var(--grass)}
+  .modal .btn-row{margin-top:8px;margin-bottom:0}
+  .toast{position:fixed;left:50%;bottom:108px;transform:translateX(-50%);background:var(--grass);color:#022;font-weight:700;padding:11px 20px;border-radius:30px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:80}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(-6px)}
+</style>
+</head>
+<body>
+<header>
+  <h1>PITCH<span>SIDE</span></h1>
+  <p>Wedstrijdschema &amp; teamtaken</p>
+</header>
+
+<div class="view on" id="view-matches">
+  <div class="wrap">
+    <div class="btn-row"><button class="btn btn-primary" onclick="openMatchModal()">+ Wedstrijd toevoegen</button></div>
+    <div class="auto-bar">
+      <button class="btn btn-accent" onclick="autoAssign()">⚡ Toekomstige wedstrijden automatisch indelen</button>
+      <label class="ovr"><span class="switch"><input type="checkbox" id="overwrite"><span class="sl"></span></span>
+        Opnieuw verdelen: bestaande indeling overschrijven</label>
+    </div>
+    <div id="matchList"></div>
+  </div>
+</div>
+
+<div class="view" id="view-roster">
+  <div class="wrap">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="openPersonModal('squad')">+ Speler</button>
+      <button class="btn btn-ghost" style="flex:1;background:var(--staff);color:#fff" onclick="openPersonModal('staff')">+ Staf</button>
+    </div>
+    <div class="grouphdr">⚽ Selectie — spelers</div>
+    <div id="squadList"></div>
+    <div class="grouphdr staff" style="margin-top:22px">🧑‍💼 Staf — scheidsrechter &amp; drinken</div>
+    <div id="staffList"></div>
+
+    <div class="grouphdr" style="margin-top:26px">💾 Back-up</div>
+    <div class="auto-bar">
+      <button class="btn btn-ghost" style="width:100%;margin-bottom:10px" onclick="exportData()">⬇️ Gegevens exporteren (back-up)</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="document.getElementById('importFile').click()">⬆️ Gegevens importeren</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)">
+      <p style="font-size:12px;color:var(--muted);margin-top:11px;line-height:1.5">Sla regelmatig een back-up op. Handig bij wisselen van telefoon of als de browsergegevens worden gewist.</p>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <button class="on" id="nav-matches" onclick="show('matches')"><span class="ni">📅</span>Wedstrijden</button>
+  <button id="nav-roster" onclick="show('roster')"><span class="ni">👥</span>Personen</button>
+</nav>
+
+<div class="modal-bg" id="matchModal">
+  <div class="modal">
+    <h2 id="mm_title">Nieuwe wedstrijd</h2>
+    <div class="field"><label>Tegenstander</label><input id="m_opp" placeholder="bijv. FC Tegenstander" autocomplete="off"></div>
+    <div class="field"><label>Datum &amp; tijd (aftrap)</label><input id="m_date" type="datetime-local"></div>
+    <div class="field"><label>Aanwezig om (optioneel)</label><input id="m_arrive" type="time"></div>
+    <div class="field"><label>Thuis of uit</label>
+      <div class="seg" id="m_ha">
+        <button class="sel" data-v="home" onclick="pickHA(this)">Thuis</button>
+        <button data-v="away" onclick="pickHA(this)">Uit</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('matchModal');editingMatchId=null">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveMatch()">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="personModal">
+  <div class="modal">
+    <h2 id="pm_title">Speler toevoegen</h2>
+    <div class="field"><label>Naam</label><input id="p_name" placeholder="Naam" autocomplete="off"></div>
+    <div class="field" id="p_numfield"><label>Rugnummer (optioneel)</label><input id="p_num" type="number" inputmode="numeric" placeholder="#"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('personModal')">Annuleren</button>
+      <button class="btn btn-primary" style="flex:1" id="pm_save" onclick="savePerson()">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- config ---------- */
+const DB='pitchside';let db;
+const ROLES=[
+  {k:'driver1', i:'🚗', l:'Chauffeur 1',             pool:'squad', show:'away'},
+  {k:'driver2', i:'🚗', l:'Chauffeur 2',             pool:'squad', show:'away'},
+  {k:'driver3', i:'🚗', l:'Chauffeur 3',             pool:'squad', show:'away'},
+  {k:'keeper1', i:'🧤', l:'Keeper 1e helft',         pool:'squad'},
+  {k:'keeper2', i:'🧤', l:'Keeper 2e helft',         pool:'squad'},
+  {k:'washing', i:'🧺', l:'Was',                     pool:'squad'},
+  {k:'referee', i:'🟨', l:'Scheidsrechter',          pool:'staff', show:'home'},
+  {k:'drinks',  i:'🥤', l:'Ranja (rust)',            pool:'staff', show:'home'},
+];
+
+/* ---------- storage ---------- */
+const STORES=['matches','players','staff'];
+function ensureStores(d){STORES.forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});});}
+function open(){return new Promise((res,rej)=>{
+  const r=indexedDB.open(DB,3);
+  r.onupgradeneeded=e=>ensureStores(e.target.result);
+  r.onsuccess=e=>{
+    db=e.target.result;
+    // veiligheidsnet: als een store toch ontbreekt, verhoog versie en maak hem aan
+    const missing=STORES.some(s=>!db.objectStoreNames.contains(s));
+    if(missing){
+      const v=db.version+1;db.close();
+      const r2=indexedDB.open(DB,v);
+      r2.onupgradeneeded=ev=>ensureStores(ev.target.result);
+      r2.onsuccess=ev=>{db=ev.target.result;res();};
+      r2.onerror=()=>rej(r2.error);
+    }else res();
+  };
+  r.onerror=()=>rej(r.error);
+});}
+function all(s){return new Promise((res,rej)=>{const t=db.transaction(s);const r=t.objectStore(s).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);t.onerror=()=>rej(t.error);});}
+function put(s,v){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite');const r=t.objectStore(s).put(v);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);t.onabort=()=>rej(t.error);});}
+function del(s,id){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite');const r=t.objectStore(s).delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);t.onabort=()=>rej(t.error);});}
+
+let matches=[],squad=[],staff=[],openId=null,haPick='home',personPool='squad',editingMatchId=null;
+
+/* ---------- helpers ---------- */
+function uid(){
+  if(window.crypto && crypto.randomUUID){try{return crypto.randomUUID()}catch(e){}}
+  return 'id-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function closeModal(id){document.getElementById(id).classList.remove('on');}
+function show(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+  document.getElementById('view-'+v).classList.add('on');
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.getElementById('nav-'+v).classList.add('on');
+}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2200);}
+function isPast(m){return m.date && new Date(m.date).getTime() < Date.now();}
+function poolOf(p){return p==='staff'?staff:squad;}
+function personName(id){const a=[...squad,...staff].find(x=>x.id===id);return a?a.name:'';}
+// roles relevant to a match: driver only away; referee/drinks only home
+function rolesFor(m){return ROLES.filter(r=>!r.show || r.show===m.ha);}
+
+/* ---------- matches CRUD ---------- */
+function openMatchModal(id,e){
+  if(e)e.stopPropagation();
+  editingMatchId=id||null;
+  const m=id?matches.find(x=>x.id===id):null;
+  document.getElementById('mm_title').textContent=m?'Wedstrijd bewerken':'Nieuwe wedstrijd';
+  document.getElementById('m_opp').value=m?m.opp:'';
+  document.getElementById('m_date').value=m&&m.date?m.date:'';
+  document.getElementById('m_arrive').value=m&&m.arrive?m.arrive:'';
+  haPick=m?m.ha:'home';
+  document.querySelectorAll('#m_ha button').forEach(b=>b.classList.toggle('sel',b.dataset.v===haPick));
+  document.getElementById('matchModal').classList.add('on');
+}
+function pickHA(b){haPick=b.dataset.v;document.querySelectorAll('#m_ha button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');}
+async function saveMatch(){
+  const opp=document.getElementById('m_opp').value.trim();
+  const date=document.getElementById('m_date').value;
+  const arrive=document.getElementById('m_arrive').value;
+  if(!opp){alert('Vul een tegenstander in');return;}
+  if(editingMatchId){
+    const m=matches.find(x=>x.id===editingMatchId);
+    m.opp=opp;m.date=date;m.arrive=arrive;
+    // strip roles that no longer apply after a home/away switch
+    if(m.ha!==haPick){m.ha=haPick;Object.keys(m.roles).forEach(k=>{const r=ROLES.find(x=>x.k===k);if(r&&r.show&&r.show!==haPick)delete m.roles[k];});}
+    await put('matches',m);
+  }else{
+    const m={id:uid(),opp,date,arrive,ha:haPick,roles:{}};
+    await put('matches',m);matches.push(m);
+  }
+  editingMatchId=null;closeModal('matchModal');renderMatches();
+}
+async function delMatch(id,e){e.stopPropagation();if(!confirm('Deze wedstrijd verwijderen?'))return;
+  await del('matches',id);matches=matches.filter(m=>m.id!==id);renderMatches();}
+function toggle(id){openId=openId===id?null:id;renderMatches();}
+async function setRole(id,role,val){const m=matches.find(x=>x.id===id);if(isPast(m))return;m.roles[role]=val;await put('matches',m);renderMatches();}
+
+/* ---------- share to WhatsApp ---------- */
+function buildMatchText(m){
+  const f=fmtDate(m.date);
+  const head=`⚽ ${m.ha==='home'?'thuis tegen':'uit bij'} ${m.opp}`;
+  const when=m.date?`🗓️ ${f.full}`:'🗓️ Datum n.t.b.';
+  const arrive=m.arrive?`⏰ Aanwezig om ${m.arrive}`:null;
+  const where=m.ha==='home'?'🏠 Thuis':'🚌 Uit';
+  const lines=rolesFor(m).map(r=>`${r.i} ${r.l}: ${m.roles[r.k]?personName(m.roles[r.k]):'—'}`);
+  return [head,when,arrive,where,'',...lines].filter(x=>x!==null).join('\n');
+}
+async function shareMatch(id,e){
+  if(e)e.stopPropagation();
+  const m=matches.find(x=>x.id===id);if(!m)return;
+  const text=buildMatchText(m);
+  if(navigator.share){
+    try{await navigator.share({title:`Wedstrijd: ${m.opp}`,text});return;}
+    catch(err){if(err && err.name==='AbortError')return;}
+  }
+  try{await navigator.clipboard.writeText(text);toast('Gekopieerd — plak in WhatsApp');}
+  catch(_){window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');}
+}
+
+/* ---------- fair auto-assignment ---------- */
+function buildCounts(){
+  const counts={};ROLES.forEach(r=>counts[r.k]={});
+  matches.forEach(m=>rolesFor(m).forEach(r=>{const pid=m.roles[r.k];if(pid)counts[r.k][pid]=(counts[r.k][pid]||0)+1;}));
+  return counts;
+}
+// total load = how many duties of ANY kind a person already carries
+function totalLoad(counts,pid){return ROLES.reduce((s,r)=>s+(counts[r.k][pid]||0),0);}
+// pick least-loaded eligible person for a role, excluding given ids (e.g. the other keeper)
+function pickBest(counts,role,exclude){
+  const pool=poolOf(role.pool).filter(p=>!exclude.includes(p.id));
+  if(!pool.length)return null;
+  let best=null,bestC=Infinity,bestT=Infinity;
+  [...pool].sort(()=>Math.random()-0.5).forEach(p=>{
+    const c=counts[role.k][p.id]||0,t=totalLoad(counts,p.id);
+    if(c<bestC||(c===bestC&&t<bestT)){best=p;bestC=c;bestT=t;}
+  });
+  return best;
+}
+async function autoAssign(){
+  const overwrite=document.getElementById('overwrite').checked;
+  if(!squad.length && !staff.length){toast('Voeg eerst personen toe');return;}
+  const counts=buildCounts();
+  ROLES.forEach(r=>poolOf(r.pool).forEach(p=>{if(counts[r.k][p.id]===undefined)counts[r.k][p.id]=0;}));
+  const future=matches.filter(m=>!isPast(m)).sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
+  if(!future.length){toast('Geen toekomstige wedstrijden');return;}
+  let changed=0;
+  for(const m of future){
+    const usedThisMatch=[]; // prevent same keeper twice etc.
+    for(const r of rolesFor(m)){
+      const already=m.roles[r.k];
+      if(already && !overwrite){usedThisMatch.push(already);continue;}
+      if(overwrite && already)counts[r.k][already]--;
+      const best=pickBest(counts,r,usedThisMatch);
+      if(best){
+        if(m.roles[r.k]!==best.id)changed++;
+        m.roles[r.k]=best.id;usedThisMatch.push(best.id);
+        counts[r.k][best.id]=(counts[r.k][best.id]||0)+1;
+      }
+    }
+    await put('matches',m);
+  }
+  renderMatches();renderPeople();
+  toast(changed?`${changed} ${changed===1?'taak':'taken'} ingedeeld`:'Al verdeeld');
+}
+async function autoAssignOne(id,e){
+  e.stopPropagation();
+  const m=matches.find(x=>x.id===id);if(isPast(m))return;
+  const counts=buildCounts();
+  ROLES.forEach(r=>poolOf(r.pool).forEach(p=>{if(counts[r.k][p.id]===undefined)counts[r.k][p.id]=0;}));
+  const usedThisMatch=rolesFor(m).map(r=>m.roles[r.k]).filter(Boolean);
+  let changed=0;
+  for(const r of rolesFor(m)){
+    if(m.roles[r.k])continue;
+    const best=pickBest(counts,r,usedThisMatch);
+    if(best){m.roles[r.k]=best.id;usedThisMatch.push(best.id);changed++;}
+  }
+  await put('matches',m);renderMatches();renderPeople();
+  toast(changed?`${changed} ${changed===1?'plek':'plekken'} ingevuld`:'Al volledig');
+}
+
+/* ---------- render matches ---------- */
+const MONTHS=['JAN','FEB','MRT','APR','MEI','JUN','JUL','AUG','SEP','OKT','NOV','DEC'];
+function fmtDate(s){
+  if(!s)return{d:'—',m:'N.T.B.',full:'Geen datum'};
+  const dt=new Date(s);
+  return{d:dt.getDate(),m:MONTHS[dt.getMonth()],
+    full:dt.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})+' · '+dt.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})};
+}
+function renderMatches(){
+  const el=document.getElementById('matchList');
+  if(!matches.length){el.innerHTML=`<div class="empty"><span class="ball">⚽</span>Nog geen wedstrijden.<br>Tik op “Wedstrijd toevoegen” om te beginnen.</div>`;return;}
+  const sorted=[...matches].sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
+  el.innerHTML=sorted.map(m=>{
+    const f=fmtDate(m.date),op=openId===m.id,past=isPast(m);
+    const optsFor=r=>{const pool=poolOf(r.pool);
+      return `<option value="">—</option>`+pool.map(p=>`<option value="${p.id}"${m.roles[r.k]===p.id?' selected':''}>${esc(p.name)}</option>`).join('');};
+    return `<div class="match ${op?'open':''} ${past?'past':''}">
+      <div class="match-head" onclick="toggle('${m.id}')">
+        <div class="badge"><div class="d">${f.d}</div><div class="m">${f.m}</div></div>
+        <div class="info">
+          <div class="opp">${m.ha==='home'?'thuis tegen':'uit bij'} ${esc(m.opp)}</div>
+          <div class="meta"><span class="ha ${m.ha}">${m.ha==='home'?'thuis':'uit'}</span> ${f.full}${m.arrive?` · ⏰ ${m.arrive}`:''} ${past?'<span class="lock">🔒 verleden</span>':''}</div>
+        </div>
+        <span class="chev">▶</span>
+      </div>
+      <div class="roles">
+        ${rolesFor(m).map(r=>`
+          <div class="role">
+            <div class="ico">${r.i}</div>
+            <div class="lbl">${r.l}<span class="tag ${r.pool}">${r.pool==='staff'?'staf':'selectie'}</span></div>
+            <select ${past?'disabled':''} onchange="setRole('${m.id}','${r.k}',this.value)">${optsFor(r)}</select>
+          </div>`).join('')}
+        <div class="match-actions">
+          <button class="mini share" onclick="shareMatch('${m.id}',event)">📲 Delen</button>
+          <button class="mini" onclick="openMatchModal('${m.id}',event)">✏️ Bewerken</button>
+          ${past?'':`<button class="mini" onclick="autoAssignOne('${m.id}',event)">⚡ Indelen</button>`}
+          <button class="del" onclick="delMatch('${m.id}',event)">🗑 Verwijderen</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- people ---------- */
+function openPersonModal(pool){
+  personPool=pool;
+  document.getElementById('pm_title').textContent=pool==='staff'?'Staflid toevoegen':'Speler toevoegen';
+  document.getElementById('p_numfield').style.display=pool==='staff'?'none':'block';
+  document.getElementById('p_name').value='';document.getElementById('p_num').value='';
+  const save=document.getElementById('pm_save');
+  save.style.background=pool==='staff'?'var(--staff)':'var(--grass)';
+  save.style.color=pool==='staff'?'#fff':'#022';
+  document.getElementById('personModal').classList.add('on');
+}
+async function savePerson(){
+  const name=document.getElementById('p_name').value.trim();
+  if(!name){alert('Vul een naam in');return;}
+  const store=personPool==='staff'?'staff':'players';
+  const p={id:uid(),name};
+  if(personPool==='squad')p.num=document.getElementById('p_num').value.trim();
+  await put(store,p);
+  (personPool==='staff'?staff:squad).push(p);
+  closeModal('personModal');renderPeople();renderMatches();
+}
+async function delPerson(id,pool){
+  if(!confirm('Deze persoon verwijderen? Toekomstige indelingen worden gewist.'))return;
+  const store=pool==='staff'?'staff':'players';
+  try{
+    await del(store,id);
+    if(pool==='staff')staff=staff.filter(p=>p.id!==id);else squad=squad.filter(p=>p.id!==id);
+    for(const m of matches){if(isPast(m))continue;let touched=false;
+      ROLES.forEach(r=>{if(m.roles[r.k]===id){delete m.roles[r.k];touched=true;}});
+      if(touched)await put('matches',m);}
+    renderPeople();renderMatches();
+  }catch(err){
+    alert('Verwijderen mislukt: '+(err&&err.message?err.message:err));
+  }
+}
+function dutyStats(id){
+  const c={};ROLES.forEach(r=>c[r.k]=0);
+  matches.forEach(m=>rolesFor(m).forEach(r=>{if(m.roles[r.k]===id)c[r.k]++;}));
+  // merge multi-slot roles (keepers, drivers) into one count each for display
+  const keeperTotal=(c.keeper1||0)+(c.keeper2||0);
+  const driverTotal=(c.driver1||0)+(c.driver2||0)+(c.driver3||0);
+  const multi=['keeper1','keeper2','driver1','driver2','driver3'];
+  const display=[];
+  if(driverTotal)display.push('🚗'+driverTotal);
+  if(keeperTotal)display.push('🧤'+keeperTotal);
+  ROLES.filter(r=>!multi.includes(r.k)&&c[r.k]>0).forEach(r=>display.push(r.i+c[r.k]));
+  const total=Object.values(c).reduce((a,b)=>a+b,0);
+  return total?`${total} ${total===1?'taak':'taken'} · ${display.join(' ')}`:'nog geen taken';
+}
+function renderPeople(){
+  const sq=document.getElementById('squadList'),st=document.getElementById('staffList');
+  sq.innerHTML=squad.length?[...squad].sort((a,b)=>(a.num||'99')-(b.num||'99')||a.name.localeCompare(b.name)).map(p=>`
+    <div class="person"><div class="num">${p.num?'#'+esc(p.num):'•'}</div>
+      <div><div class="pname">${esc(p.name)}</div><div class="stats">${dutyStats(p.id)}</div></div>
+      <button class="del" style="margin-left:auto" onclick="delPerson('${p.id}','squad')">verwijder</button></div>`).join('')
+    :`<div class="empty" style="padding:24px"><span class="ball">⚽</span>Nog geen spelers.</div>`;
+  st.innerHTML=staff.length?[...staff].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
+    <div class="person staff"><div class="num">★</div>
+      <div><div class="pname">${esc(p.name)}</div><div class="stats">${dutyStats(p.id)}</div></div>
+      <button class="del" style="margin-left:auto" onclick="delPerson('${p.id}','staff')">verwijder</button></div>`).join('')
+    :`<div class="empty" style="padding:24px"><span class="ball">🧑‍💼</span>Nog geen staf.</div>`;
+}
+
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg){bg.classList.remove('on');editingMatchId=null;}}));
+/* ---------- back-up: export / import ---------- */
+function exportData(){
+  const data={app:'pitchside',version:1,exportedAt:new Date().toISOString(),matches,players:squad,staff};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const stamp=new Date().toISOString().slice(0,10);
+  a.href=url;a.download=`teambeheer-backup-${stamp}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('Back-up gedownload');
+}
+async function importData(input){
+  const file=input.files&&input.files[0];if(!file)return;
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    if(data.app!=='pitchside'||!Array.isArray(data.matches)){alert('Dit is geen geldig back-upbestand.');input.value='';return;}
+    if(!confirm('Dit overschrijft alle huidige gegevens met de back-up. Doorgaan?')){input.value='';return;}
+    // wis bestaande stores en zet de back-up terug
+    for(const m of matches)await del('matches',m.id);
+    for(const p of squad)await del('players',p.id);
+    for(const s of staff)await del('staff',s.id);
+    matches=data.matches||[];squad=data.players||[];staff=data.staff||[];
+    for(const m of matches)await put('matches',m);
+    for(const p of squad)await put('players',p);
+    for(const s of staff)await put('staff',s);
+    renderMatches();renderPeople();
+    toast('Back-up teruggezet');
+  }catch(err){
+    alert('Importeren mislukt: '+(err&&err.message?err.message:err));
+  }
+  input.value='';
+}
+
+(async function(){
+  // vraag duurzame opslag aan zodat Android de data niet automatisch wist
+  try{if(navigator.storage && navigator.storage.persist){await navigator.storage.persist();}}catch(e){}
+  await open();matches=await all('matches');squad=await all('players');staff=await all('staff');renderMatches();renderPeople();
+})();
+</script>
+</body>
+</html>

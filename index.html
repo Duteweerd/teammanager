@@ -553,17 +553,37 @@ async function importData(input){
     const text=await file.text();
     const data=JSON.parse(text);
     if(data.app!=='pitchside'||!Array.isArray(data.matches)){alert('Dit is geen geldig back-upbestand.');input.value='';return;}
-    if(!confirm('Dit overschrijft alle huidige gegevens met de back-up. Doorgaan?')){input.value='';return;}
-    // wis bestaande stores en zet de back-up terug
-    for(const m of matches)await del('matches',m.id);
-    for(const p of squad)await del('players',p.id);
-    for(const s of staff)await del('staff',s.id);
-    matches=data.matches||[];squad=data.players||[];staff=data.staff||[];
-    for(const m of matches)await put('matches',m);
-    for(const p of squad)await put('players',p);
-    for(const s of staff)await put('staff',s);
+    const hasPeople=(data.players&&data.players.length)||(data.staff&&data.staff.length);
+    // bevat het bestand geen spelers/staf? Dan samenvoegen i.p.v. alles wissen.
+    let mode;
+    if(!hasPeople && (squad.length||staff.length)){
+      mode = confirm('Dit bestand bevat alleen wedstrijden.\n\nOK = wedstrijden toevoegen (spelers en staf behouden)\nAnnuleren = volledig vervangen (alles wissen)') ? 'merge' : 'replace';
+    } else {
+      if(!confirm('Dit overschrijft alle huidige gegevens met de back-up. Doorgaan?')){input.value='';return;}
+      mode='replace';
+    }
+    if(mode==='replace'){
+      for(const m of matches)await del('matches',m.id);
+      for(const p of squad)await del('players',p.id);
+      for(const s of staff)await del('staff',s.id);
+      matches=data.matches||[];squad=data.players||[];staff=data.staff||[];
+      for(const m of matches)await put('matches',m);
+      for(const p of squad)await put('players',p);
+      for(const s of staff)await put('staff',s);
+      toast('Back-up teruggezet');
+    } else {
+      // samenvoegen: nieuwe wedstrijden toevoegen, dubbele (zelfde datum+tegenstander) overslaan
+      let added=0;
+      const key=m=>`${m.date}|${m.opp}|${m.ha}`;
+      const existing=new Set(matches.map(key));
+      for(const m of (data.matches||[])){
+        if(existing.has(key(m)))continue;
+        if(!m.id)m.id=uid();
+        matches.push(m);await put('matches',m);added++;
+      }
+      toast(`${added} ${added===1?'wedstrijd':'wedstrijden'} toegevoegd`);
+    }
     renderMatches();renderPeople();
-    toast('Back-up teruggezet');
   }catch(err){
     alert('Importeren mislukt: '+(err&&err.message?err.message:err));
   }

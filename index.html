@@ -95,6 +95,7 @@
   .person.staff .num{color:var(--staff)}
   .person .pname{flex:1;font-weight:700;font-size:15px}
   .person .stats{font-size:11px;color:var(--muted);font-weight:600}
+  .coachbadge{font-size:10px;font-weight:700;color:var(--staff);background:rgba(124,92,255,.15);padding:2px 7px;border-radius:6px;margin-left:4px;white-space:nowrap}
   .modal-bg{position:fixed;inset:0;background:rgba(3,12,22,.78);backdrop-filter:blur(3px);display:none;align-items:flex-end;z-index:50}
   .modal-bg.on{display:flex}
   .modal{background:var(--card);width:100%;border-radius:22px 22px 0 0;padding:22px 18px calc(env(safe-area-inset-bottom) + 22px);border-top:2px solid var(--grass);animation:up .25s ease;max-width:680px;margin:0 auto}
@@ -180,8 +181,14 @@
     <h2 id="pm_title">Speler toevoegen</h2>
     <div class="field"><label>Naam</label><input id="p_name" placeholder="Naam" autocomplete="off"></div>
     <div class="field" id="p_numfield"><label>Rugnummer (optioneel)</label><input id="p_num" type="number" inputmode="numeric" placeholder="#"></div>
+    <div class="field" id="p_coachfield" style="display:none">
+      <label class="ovr" style="color:var(--muted);text-transform:none;letter-spacing:0;font-size:14px;display:flex;align-items:center;gap:9px;cursor:pointer">
+        <span class="switch"><input type="checkbox" id="p_coach"><span class="sl"></span></span>
+        Kan coach zijn
+      </label>
+    </div>
     <div class="btn-row">
-      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('personModal')">Annuleren</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('personModal');editingPersonId=null">Annuleren</button>
       <button class="btn btn-primary" style="flex:1" id="pm_save" onclick="savePerson()">Opslaan</button>
     </div>
   </div>
@@ -288,6 +295,8 @@ async function setRole(id,role,val){const m=matches.find(x=>x.id===id);if(isPast
 async function toggleCoach(id,staffId,e){
   if(e)e.stopPropagation();
   const m=matches.find(x=>x.id===id);if(isPast(m))return;
+  const sm=staff.find(s=>s.id===staffId);
+  if(!sm||!sm.isCoach)return; // alleen coach-gemarkeerde staf
   if(!Array.isArray(m.coaches))m.coaches=[];
   const i=m.coaches.indexOf(staffId);
   if(i>=0){m.coaches.splice(i,1);}
@@ -413,12 +422,14 @@ function renderMatches(){
       <div class="roles">
         <div class="coachbox">
           <div class="coachhead">🧑‍🏫 Coaches <span class="tag staff">staf · handmatig</span></div>
-          ${staff.length?`<div class="chips">${staff.map(s=>{
-            const isCoach=coachesOf(m).includes(s.id);
-            const hasOtherRole=rolesFor(m).some(r=>r.pool==='staff'&&m.roles[r.k]===s.id);
-            const disabled=past||(!isCoach&&hasOtherRole);
-            return `<button class="chip ${isCoach?'on':''}" ${disabled?'disabled':''} onclick="toggleCoach('${m.id}','${s.id}',event)">${esc(s.name)}</button>`;
-          }).join('')}</div>`:`<div class="coachempty">Nog geen staf om als coach te kiezen.</div>`}
+          ${(()=>{const eligible=staff.filter(s=>s.isCoach);
+            if(!eligible.length)return `<div class="coachempty">Geen stafleden gemarkeerd als coach. Zet bij een staflid “Kan coach zijn” aan.</div>`;
+            return `<div class="chips">${eligible.map(s=>{
+              const assigned=coachesOf(m).includes(s.id);
+              const hasOtherRole=rolesFor(m).some(r=>r.pool==='staff'&&m.roles[r.k]===s.id);
+              const disabled=past||(!assigned&&hasOtherRole);
+              return `<button class="chip ${assigned?'on':''}" ${disabled?'disabled':''} onclick="toggleCoach('${m.id}','${s.id}',event)">${esc(s.name)}</button>`;
+            }).join('')}</div>`;})()}
         </div>
         ${rolesFor(m).map(r=>`
           <div class="role">
@@ -438,11 +449,16 @@ function renderMatches(){
 }
 
 /* ---------- people ---------- */
-function openPersonModal(pool){
-  personPool=pool;
-  document.getElementById('pm_title').textContent=pool==='staff'?'Staflid toevoegen':'Speler toevoegen';
+let editingPersonId=null;
+function openPersonModal(pool,id){
+  personPool=pool;editingPersonId=id||null;
+  const existing=id?poolOf(pool).find(p=>p.id===id):null;
+  document.getElementById('pm_title').textContent=existing?(pool==='staff'?'Staflid bewerken':'Speler bewerken'):(pool==='staff'?'Staflid toevoegen':'Speler toevoegen');
   document.getElementById('p_numfield').style.display=pool==='staff'?'none':'block';
-  document.getElementById('p_name').value='';document.getElementById('p_num').value='';
+  document.getElementById('p_coachfield').style.display=pool==='staff'?'block':'none';
+  document.getElementById('p_name').value=existing?existing.name:'';
+  document.getElementById('p_num').value=existing&&existing.num?existing.num:'';
+  document.getElementById('p_coach').checked=existing?!!existing.isCoach:false;
   const save=document.getElementById('pm_save');
   save.style.background=pool==='staff'?'var(--staff)':'var(--grass)';
   save.style.color=pool==='staff'?'#fff':'#022';
@@ -452,11 +468,25 @@ async function savePerson(){
   const name=document.getElementById('p_name').value.trim();
   if(!name){alert('Vul een naam in');return;}
   const store=personPool==='staff'?'staff':'players';
-  const p={id:uid(),name};
-  if(personPool==='squad')p.num=document.getElementById('p_num').value.trim();
-  await put(store,p);
-  (personPool==='staff'?staff:squad).push(p);
-  closeModal('personModal');renderPeople();renderMatches();
+  if(editingPersonId){
+    const p=poolOf(personPool).find(x=>x.id===editingPersonId);
+    p.name=name;
+    if(personPool==='squad')p.num=document.getElementById('p_num').value.trim();
+    if(personPool==='staff')p.isCoach=document.getElementById('p_coach').checked;
+    await put(store,p);
+    // als coach-markering wordt uitgezet, verwijder deze persoon als coach uit toekomstige wedstrijden
+    if(personPool==='staff' && !p.isCoach){
+      for(const m of matches){if(isPast(m))continue;
+        if(Array.isArray(m.coaches)&&m.coaches.includes(p.id)){m.coaches=m.coaches.filter(x=>x!==p.id);await put('matches',m);}}
+    }
+  }else{
+    const p={id:uid(),name};
+    if(personPool==='squad')p.num=document.getElementById('p_num').value.trim();
+    if(personPool==='staff')p.isCoach=document.getElementById('p_coach').checked;
+    await put(store,p);
+    (personPool==='staff'?staff:squad).push(p);
+  }
+  editingPersonId=null;closeModal('personModal');renderPeople();renderMatches();
 }
 async function delPerson(id,pool){
   if(!confirm('Deze persoon verwijderen? Toekomstige indelingen worden gewist.'))return;
@@ -498,12 +528,13 @@ function renderPeople(){
     :`<div class="empty" style="padding:24px"><span class="ball">⚽</span>Nog geen spelers.</div>`;
   st.innerHTML=staff.length?[...staff].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
     <div class="person staff"><div class="num">★</div>
-      <div><div class="pname">${esc(p.name)}</div><div class="stats">${dutyStats(p.id)}</div></div>
-      <button class="del" style="margin-left:auto" onclick="delPerson('${p.id}','staff')">verwijder</button></div>`).join('')
+      <div style="flex:1"><div class="pname">${esc(p.name)}${p.isCoach?' <span class="coachbadge">🧑‍🏫 coach</span>':''}</div><div class="stats">${dutyStats(p.id)}</div></div>
+      <button class="mini" onclick="openPersonModal('staff','${p.id}')">✏️</button>
+      <button class="del" onclick="delPerson('${p.id}','staff')">verwijder</button></div>`).join('')
     :`<div class="empty" style="padding:24px"><span class="ball">🧑‍💼</span>Nog geen staf.</div>`;
 }
 
-document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg){bg.classList.remove('on');editingMatchId=null;}}));
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg){bg.classList.remove('on');editingMatchId=null;editingPersonId=null;}}));
 /* ---------- back-up: export / import ---------- */
 function exportData(){
   const data={app:'pitchside',version:1,exportedAt:new Date().toISOString(),matches,players:squad,staff};

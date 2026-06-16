@@ -117,6 +117,9 @@
   .seg button{flex:1;padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--pitch-deep);color:var(--muted);font-family:'Archivo';font-weight:700;cursor:pointer}
   .seg button.sel{background:var(--grass);color:#022;border-color:var(--grass)}
   .modal .btn-row{margin-top:8px;margin-bottom:0}
+  .reminder{background:rgba(255,210,63,.1);border:1px solid var(--accent);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:10px}
+  .reminder .rem-txt{font-size:13px;font-weight:600;color:var(--accent);line-height:1.4}
+  .reminder .rem-actions{display:flex;gap:8px;flex-wrap:wrap}
   .sync-status{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .sync-status .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0}
   .sync-status.ok .dot{background:var(--grass)}
@@ -136,6 +139,14 @@
 
 <div class="view on" id="view-matches">
   <div class="wrap">
+    <div id="backupReminder" class="reminder" style="display:none">
+      <div class="rem-txt">💾 Tijd voor een back-up — je gegevens staan alleen op dit apparaat.</div>
+      <div class="rem-actions">
+        <button class="mini share" onclick="doReminderBackup()">⬇️ Back-up</button>
+        <button class="mini" onclick="show('roster')">☁️ Sync</button>
+        <button class="mini" onclick="snoozeReminder()">Later</button>
+      </div>
+    </div>
     <div class="btn-row"><button class="btn btn-primary" onclick="openMatchModal()">+ Wedstrijd toevoegen</button></div>
     <div class="auto-bar">
       <button class="btn btn-accent" onclick="autoAssign()">⚡ Toekomstige wedstrijden automatisch indelen</button>
@@ -619,7 +630,24 @@ function exportData(){
   a.href=url;a.download=`teambeheer-backup-${stamp}.json`;
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+  markBackupDone();
   toast('Back-up gedownload');
+}
+/* ---------- back-up herinnering (vangnet als Drive-sync niet wordt gebruikt) ---------- */
+function markBackupDone(){LS.set('pitchside_lastBackup',String(Date.now()));maybeRemindBackup();}
+function snoozeReminder(){LS.set('pitchside_remindSnooze',String(Date.now()+3*24*3600*1000));maybeRemindBackup();}
+function doReminderBackup(){exportData();}
+function maybeRemindBackup(){
+  const el=document.getElementById('backupReminder');if(!el)return;
+  const hasData=matches.length||squad.length||staff.length;
+  const snooze=parseInt(LS.get('pitchside_remindSnooze')||'0',10)||0;
+  const last=parseInt(LS.get('pitchside_lastBackup')||'0',10)||0;
+  const WEEK=7*24*3600*1000;
+  let due=false;
+  if(hasData && !driveConnected && Date.now()>=snooze){
+    due = !last || (Date.now()-last>WEEK); // nog nooit, of langer dan een week geleden
+  }
+  el.style.display=due?'flex':'none';
 }
 async function importData(input){
   const file=input.files&&input.files[0];if(!file)return;
@@ -787,7 +815,7 @@ async function driveUpdate(){
 // achtergrond-upload na een wijziging (stil; geen popup)
 async function pushNow(){
   if(!driveConnected||!clientId||syncing)return;
-  try{await driveFind();await driveUpdate();lastSynced=Date.now();saveMeta();renderSyncUI();}
+  try{await driveFind();await driveUpdate();lastSynced=Date.now();LS.set('pitchside_lastBackup',String(lastSynced));saveMeta();renderSyncUI();}
   catch(e){renderSyncUI('reconnect');}
 }
 // volledige afstemming: nieuwste versie wint (per apparaat, geen veld-voor-veld merge)
@@ -811,7 +839,7 @@ async function syncNow(interactive){
       }else if(rU>localUpdatedAt){await applyData(remote);localUpdatedAt=rU;}
       else if(localUpdatedAt>rU){await driveUpdate();}
     }
-    lastSynced=Date.now();saveMeta();renderSyncUI();
+    lastSynced=Date.now();LS.set('pitchside_lastBackup',String(lastSynced));saveMeta();renderSyncUI();maybeRemindBackup();
     if(interactive)toast('Gesynct met Google Drive');
   }catch(e){
     console.error('sync',e);
@@ -825,7 +853,7 @@ async function connectDrive(){
 }
 function disconnectDrive(){
   if(accessToken){try{google.accounts.oauth2.revoke(accessToken,()=>{});}catch(e){}}
-  driveConnected=false;accessToken=null;tokenExpiry=0;saveMeta();renderSyncUI();toast('Verbinding verbroken');
+  driveConnected=false;accessToken=null;tokenExpiry=0;saveMeta();renderSyncUI();maybeRemindBackup();toast('Verbinding verbroken');
 }
 function saveClientId(){
   const v=document.getElementById('sync_clientId').value.trim();
@@ -862,7 +890,7 @@ function renderSyncUI(state,detail){
   // vraag duurzame opslag aan zodat Android de data niet automatisch wist
   try{if(navigator.storage && navigator.storage.persist){await navigator.storage.persist();}}catch(e){}
   await open();matches=await all('matches');squad=await all('players');staff=await all('staff');renderMatches();renderPeople();
-  renderSyncUI();
+  renderSyncUI();maybeRemindBackup();
   if(driveConnected&&clientId){syncNow(false);} // stille sync bij openen
 })();
 </script>

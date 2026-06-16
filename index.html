@@ -766,14 +766,18 @@ async function ensureTokenClient(){
 }
 async function getToken(interactive){
   if(accessToken&&Date.now()<tokenExpiry-60000)return accessToken;
-  await ensureTokenClient();
   return new Promise((res,rej)=>{
-    _tokenResolve=res;_tokenReject=rej;
-    const guard=setTimeout(()=>{if(_tokenReject){_tokenReject(new Error('time-out bij inloggen'));_tokenResolve=_tokenReject=null;}},interactive?120000:20000);
-    const wrap=fn=>v=>{clearTimeout(guard);fn(v);};
-    _tokenResolve=wrap(res);_tokenReject=wrap(rej);
-    try{tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
-    catch(e){clearTimeout(guard);_tokenResolve=_tokenReject=null;rej(e);}
+    const fire=()=>{
+      const guard=setTimeout(()=>{if(_tokenReject){_tokenReject(new Error('time-out bij inloggen'));_tokenResolve=_tokenReject=null;}},interactive?120000:20000);
+      _tokenResolve=v=>{clearTimeout(guard);res(v);};
+      _tokenReject=e=>{clearTimeout(guard);rej(e);};
+      try{tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
+      catch(e){clearTimeout(guard);_tokenResolve=_tokenReject=null;rej(e);}
+    };
+    // BELANGRIJK: bij een klik moet requestAccessToken synchroon worden aangeroepen,
+    // anders blokkeert de browser de Google-popup ("Failed to open popup").
+    if(tokenClient){fire();}
+    else{ensureTokenClient().then(fire).catch(rej);}
   });
 }
 
@@ -843,8 +847,12 @@ async function syncNow(interactive){
     if(interactive)toast('Gesynct met Google Drive');
   }catch(e){
     console.error('sync',e);
-    renderSyncUI('err',e&&e.message);
-    if(interactive)toast('Sync mislukt — controleer je Client ID en internet');
+    const msg=(e&&e.message)||'';
+    renderSyncUI('err',msg);
+    if(interactive){
+      if(/popup/i.test(msg))toast('Sta pop-ups toe voor deze site en tik nogmaals op “Verbind”.');
+      else toast('Sync mislukt — controleer je Client ID en internet');
+    }
   }finally{syncing=false;}
 }
 async function connectDrive(){
@@ -858,7 +866,8 @@ function disconnectDrive(){
 function saveClientId(){
   const v=document.getElementById('sync_clientId').value.trim();
   if(!v){toast('Plak je Client ID');return;}
-  clientId=v;LS.set('pitchside_clientId',v);tokenClient=null;
+  clientId=v;LS.set('pitchside_clientId',v);tokenClient=null;accessToken=null;tokenExpiry=0;
+  ensureTokenClient().catch(()=>{}); // alvast klaarzetten zodat de popup straks bij de klik opent
   renderSyncUI();toast('Client ID opgeslagen — verbind nu met Drive');
 }
 function toggleSyncHelp(e){if(e)e.preventDefault();const h=document.getElementById('sync_help');h.style.display=h.style.display==='none'?'block':'none';}
@@ -891,6 +900,7 @@ function renderSyncUI(state,detail){
   try{if(navigator.storage && navigator.storage.persist){await navigator.storage.persist();}}catch(e){}
   await open();matches=await all('matches');squad=await all('players');staff=await all('staff');renderMatches();renderPeople();
   renderSyncUI();maybeRemindBackup();
+  if(clientId){ensureTokenClient().catch(()=>{});} // token-client vast initialiseren
   if(driveConnected&&clientId){syncNow(false);} // stille sync bij openen
 })();
 </script>

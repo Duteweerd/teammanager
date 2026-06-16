@@ -75,8 +75,15 @@
   .chip{background:var(--card-hi);border:1px solid var(--line);color:var(--chalk);border-radius:20px;padding:7px 13px;font-family:'Archivo';font-weight:700;font-size:13px;cursor:pointer;transition:transform .1s}
   .chip:active{transform:scale(.95)}
   .chip.on{background:var(--staff);border-color:var(--staff);color:#fff}
+  .chip.av{background:var(--grass);border-color:var(--grass);color:#022}
+  .chip.off{opacity:.5;text-decoration:line-through;text-decoration-color:var(--danger)}
   .chip:disabled{opacity:.4;cursor:not-allowed}
   .coachempty{font-size:12px;color:var(--muted);font-style:italic}
+  .selbox{padding:11px 4px 13px;border-bottom:1px solid rgba(29,58,87,.5)}
+  .selgroup{margin-bottom:11px}
+  .selgroup:last-child{margin-bottom:0}
+  .sellbl{display:block;font-size:11px;font-weight:700;color:var(--grass);margin-bottom:7px;letter-spacing:.3px}
+  .sellbl.staff{color:var(--staff)}
   .mini{background:var(--card-hi);border:1px solid var(--line);border-radius:9px;color:var(--chalk);font-size:12px;font-weight:700;cursor:pointer;padding:8px 11px}
   .mini.share{background:rgba(22,184,107,.18);border-color:var(--grass);color:var(--grass)}
   .del{background:none;border:none;color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;padding:6px;margin-left:auto}
@@ -256,6 +263,9 @@ function personName(id){const a=[...squad,...staff].find(x=>x.id===id);return a?
 // roles relevant to a match: driver only away; referee/drinks only home
 function rolesFor(m){return ROLES.filter(r=>!r.show || r.show===m.ha);}
 function coachesOf(m){return Array.isArray(m.coaches)?m.coaches:[];}
+// availability: a person is available for a match unless listed in m.unavailable (default: everyone available)
+function unavailOf(m){return Array.isArray(m.unavailable)?m.unavailable:[];}
+function isAvail(m,id){return !unavailOf(m).includes(id);}
 
 /* ---------- matches CRUD ---------- */
 function openMatchModal(id,e){
@@ -307,6 +317,19 @@ async function toggleCoach(id,staffId,e){
   }
   await put('matches',m);renderMatches();
 }
+async function toggleAvail(id,personId,e){
+  if(e)e.stopPropagation();
+  const m=matches.find(x=>x.id===id);if(!m||isPast(m))return;
+  if(!Array.isArray(m.unavailable))m.unavailable=[];
+  const i=m.unavailable.indexOf(personId);
+  if(i>=0){m.unavailable.splice(i,1);} // weer beschikbaar
+  else{
+    m.unavailable.push(personId); // afgemeld: verwijder uit alle taken/coach in deze wedstrijd
+    ROLES.forEach(r=>{if(m.roles[r.k]===personId)delete m.roles[r.k];});
+    if(Array.isArray(m.coaches))m.coaches=m.coaches.filter(x=>x!==personId);
+  }
+  await put('matches',m);renderMatches();renderPeople();
+}
 
 /* ---------- share to WhatsApp ---------- */
 function buildMatchText(m){
@@ -318,7 +341,9 @@ function buildMatchText(m){
   const lines=rolesFor(m).map(r=>`${r.i} ${r.l}: ${m.roles[r.k]?personName(m.roles[r.k]):'—'}`);
   const cs=coachesOf(m);
   const coachLine=cs.length?`🧑‍🏫 ${cs.length>1?'Coaches':'Coach'}: ${cs.map(personName).join(', ')}`:null;
-  return [head,when,arrive,where,'',coachLine,...lines].filter(x=>x!==null).join('\n');
+  const absent=unavailOf(m).map(personName).filter(Boolean);
+  const absentLine=absent.length?`🚫 Afgemeld: ${absent.join(', ')}`:null;
+  return [head,when,arrive,where,'',coachLine,...lines,absentLine?'':null,absentLine].filter(x=>x!==null).join('\n');
 }
 async function shareMatch(id,e){
   if(e)e.stopPropagation();
@@ -341,8 +366,8 @@ function buildCounts(){
 // total load = how many duties of ANY kind a person already carries
 function totalLoad(counts,pid){return ROLES.reduce((s,r)=>s+(counts[r.k][pid]||0),0);}
 // pick least-loaded eligible person for a role, excluding given ids (e.g. the other keeper)
-function pickBest(counts,role,exclude){
-  const pool=poolOf(role.pool).filter(p=>!exclude.includes(p.id));
+function pickBest(counts,role,exclude,m){
+  const pool=poolOf(role.pool).filter(p=>!exclude.includes(p.id)&&(!m||isAvail(m,p.id)));
   if(!pool.length)return null;
   let best=null,bestC=Infinity,bestT=Infinity;
   [...pool].sort(()=>Math.random()-0.5).forEach(p=>{
@@ -365,7 +390,7 @@ async function autoAssign(){
       const already=m.roles[r.k];
       if(already && !overwrite){usedThisMatch.push(already);continue;}
       if(overwrite && already)counts[r.k][already]--;
-      const best=pickBest(counts,r,usedThisMatch);
+      const best=pickBest(counts,r,usedThisMatch,m);
       if(best){
         if(m.roles[r.k]!==best.id)changed++;
         m.roles[r.k]=best.id;usedThisMatch.push(best.id);
@@ -386,7 +411,7 @@ async function autoAssignOne(id,e){
   let changed=0;
   for(const r of rolesFor(m)){
     if(m.roles[r.k])continue;
-    const best=pickBest(counts,r,usedThisMatch);
+    const best=pickBest(counts,r,usedThisMatch,m);
     if(best){m.roles[r.k]=best.id;usedThisMatch.push(best.id);changed++;}
   }
   await put('matches',m);renderMatches();renderPeople();
@@ -407,7 +432,7 @@ function renderMatches(){
   const sorted=[...matches].sort((a,b)=>(a.date||'9').localeCompare(b.date||'9'));
   el.innerHTML=sorted.map(m=>{
     const f=fmtDate(m.date),op=openId===m.id,past=isPast(m);
-    const optsFor=(r,mm)=>{let pool=poolOf(r.pool);
+    const optsFor=(r,mm)=>{let pool=poolOf(r.pool).filter(p=>isAvail(mm,p.id)||mm.roles[r.k]===p.id);
       if(r.pool==='staff')pool=pool.filter(p=>!coachesOf(mm).includes(p.id)||mm.roles[r.k]===p.id);
       return `<option value="">—</option>`+pool.map(p=>`<option value="${p.id}"${mm.roles[r.k]===p.id?' selected':''}>${esc(p.name)}</option>`).join('');};
     return `<div class="match ${op?'open':''} ${past?'past':''}">
@@ -415,15 +440,26 @@ function renderMatches(){
         <div class="badge"><div class="d">${f.d}</div><div class="m">${f.m}</div></div>
         <div class="info">
           <div class="opp">${m.ha==='home'?'thuis tegen':'uit bij'} ${esc(m.opp)}</div>
-          <div class="meta"><span class="ha ${m.ha}">${m.ha==='home'?'thuis':'uit'}</span> ${f.full}${m.arrive?` · ⏰ ${m.arrive}`:''} ${past?'<span class="lock">🔒 verleden</span>':''}</div>
+          <div class="meta"><span class="ha ${m.ha}">${m.ha==='home'?'thuis':'uit'}</span> ${f.full}${m.arrive?` · ⏰ ${m.arrive}`:''} ${unavailOf(m).length?`<span class="lock">🚫 ${unavailOf(m).length} afgemeld</span>`:''} ${past?'<span class="lock">🔒 verleden</span>':''}</div>
         </div>
         <span class="chev">▶</span>
       </div>
       <div class="roles">
+        <div class="selbox">
+          <div class="coachhead">📋 Selectie — wie is er bij? <span class="tag squad">tik om af te melden</span></div>
+          ${(()=>{
+            if(!squad.length&&!staff.length)return `<div class="coachempty">Voeg eerst spelers en staf toe op het tabblad “Personen”.</div>`;
+            const chip=(p,pool)=>{const av=isAvail(m,p.id);
+              return `<button class="chip ${av?(pool==='staff'?'on':'av'):'off'}" ${past?'disabled':''} onclick="toggleAvail('${m.id}','${p.id}',event)">${av?'':'✕ '}${esc(p.name)}</button>`;};
+            const sq=[...squad].sort((a,b)=>(a.num||'99')-(b.num||'99')||a.name.localeCompare(b.name)).map(p=>chip(p,'squad')).join('');
+            const stf=[...staff].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>chip(p,'staff')).join('');
+            return `${squad.length?`<div class="selgroup"><span class="sellbl">⚽ Spelers</span><div class="chips">${sq}</div></div>`:''}${staff.length?`<div class="selgroup"><span class="sellbl staff">🧑‍💼 Staf</span><div class="chips">${stf}</div></div>`:''}`;
+          })()}
+        </div>
         <div class="coachbox">
           <div class="coachhead">🧑‍🏫 Coaches <span class="tag staff">staf · handmatig</span></div>
-          ${(()=>{const eligible=staff.filter(s=>s.isCoach);
-            if(!eligible.length)return `<div class="coachempty">Geen stafleden gemarkeerd als coach. Zet bij een staflid “Kan coach zijn” aan.</div>`;
+          ${(()=>{const eligible=staff.filter(s=>s.isCoach&&isAvail(m,s.id));
+            if(!eligible.length)return `<div class="coachempty">Geen beschikbare stafleden gemarkeerd als coach. Zet bij een staflid “Kan coach zijn” aan en zorg dat het lid niet is afgemeld.</div>`;
             return `<div class="chips">${eligible.map(s=>{
               const assigned=coachesOf(m).includes(s.id);
               const hasOtherRole=rolesFor(m).some(r=>r.pool==='staff'&&m.roles[r.k]===s.id);
@@ -497,6 +533,7 @@ async function delPerson(id,pool){
     for(const m of matches){if(isPast(m))continue;let touched=false;
       ROLES.forEach(r=>{if(m.roles[r.k]===id){delete m.roles[r.k];touched=true;}});
       if(Array.isArray(m.coaches)&&m.coaches.includes(id)){m.coaches=m.coaches.filter(x=>x!==id);touched=true;}
+      if(Array.isArray(m.unavailable)&&m.unavailable.includes(id)){m.unavailable=m.unavailable.filter(x=>x!==id);touched=true;}
       if(touched)await put('matches',m);}
     renderPeople();renderMatches();
   }catch(err){
